@@ -1,3 +1,15 @@
+certifi==2018.1.18
+chardet==3.0.4
+gitdb2==2.0.3
 GitPython==2.1.8
-plumbum
-requests
+idna==2.6
+nltk==3.2.5
+numpy==1.14.0
+plumbum==1.6.5
+requests==2.18.4
+scikit-learn==0.19.1
+scipy==1.0.0
+six==1.11.0
+smmap2==2.0.3
+urllib3==1.22
+wheel==0.24.0

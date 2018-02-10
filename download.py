@@ -1,10 +1,25 @@
 import git
 import requests
 import os, time
-from os import path as osp
 import threading
 import shutil
 import argparse
+import codecs
+import json
+
+from collections import Counter
+
+from os import path as osp
+
+
+REPOS_DIR = 'data/repos'
+DATA_DIR = 'data/prepared'
+DOWNLOADED_FILE = "data/downloaded.txt"
+
+if not osp.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+if not osp.exists(REPOS_DIR):
+    os.makedirs(REPOS_DIR)
 
 latency = 7
 cwd = os.getcwd()
@@ -13,13 +28,16 @@ perpage = 100
 threads = []
 
 semaphore = None
-downloaded = open("downloaded.txt", "a")
+downloaded = open(DOWNLOADED_FILE, "a")
+
+
+def get_local_fullname(fullname):
+    user, name = tuple(fullname.split("/"))
+    return "%s@%s" % (user, name)
 
 
 def get_local_filename(fullname):
-    user, name = tuple(fullname.split("/"))
-    local_fullname = "%s@%s" % (user, name)
-    path = osp.join(osp.join(cwd, 'data'), local_fullname)
+    path = osp.join(osp.join(cwd, REPOS_DIR), get_local_fullname(fullname))
     return path
 
 
@@ -29,9 +47,32 @@ def get_github_filename(fullname):
 
 
 class MyThread(threading.Thread):
-    def __init__(self, repo):
+    def __init__(self, repo, num_latest_commits=100):
         self.repo = repo
+        self._num_latest_commits = num_latest_commits
         super(MyThread, self).__init__()
+
+    @staticmethod
+    def _get_readme_content(repo):
+        repo_dir = os.path.dirname(repo.git_dir)
+        readme_file = next(
+            (os.path.join(root, filename)
+            for root, _, files in os.walk(repo_dir) for filename in files
+            if osp.splitext(filename)[0] == 'README'),
+            None
+        )
+        if not readme_file:
+            print('README not found in %s' % repo_dir)
+            result = ''
+        else:
+            with open(readme_file) as f:
+                result = f.read().decode('utf-8')
+        return result
+
+    @staticmethod
+    def _dump_data(name, **kwargs):
+        with codecs.open(os.path.join(DATA_DIR, name), mode='w', encoding='utf-8') as fout:
+            fout.write(json.dumps(kwargs, sort_keys=True, indent=4))
 
     def run(self):
         path = get_local_filename(self.repo["full_name"])
@@ -40,7 +81,16 @@ class MyThread(threading.Thread):
             print("Removing %s" % self.repo["full_name"])
             shutil.rmtree(path)
 
-        git.Repo.clone_from(self.repo["html_url"], path, )
+        repo = git.Repo.clone_from(self.repo["html_url"], path)
+        authors = Counter(
+            (commit.author.name, commit.author.email)
+            for commit in repo.iter_commits(max_count=self._num_latest_commits)
+        )
+        self._dump_data(
+            name=get_local_fullname(self.repo["full_name"]),
+            readme_content=self._get_readme_content(repo),
+            main_contributor=dict(zip(('name', 'email'), authors.most_common(1)[0][0]))
+        )
         downloaded.write("%s\n" % self.repo["full_name"])
         downloaded.flush()
         semaphore.release()
@@ -80,7 +130,7 @@ def parse(number):
 
 
 def clear():
-    for local_filename in os.listdir("data"):
+    for local_filename in os.listdir(REPOS_DIR):
         fullname = get_github_filename(local_filename)
         if fullname not in downloaded_set:
             print("Removing %s" % local_filename)
@@ -96,11 +146,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     semaphore = threading.Semaphore(args.jobs)
-    if osp.exists("downloaded.txt"):
-        downloaded_set = set([str(line).strip() for line in open("downloaded.txt").readlines()])
+    if osp.exists(DOWNLOADED_FILE):
+        downloaded_set = set([str(line).strip() for line in open(DOWNLOADED_FILE).readlines()])
         print("Preloaded %s repos" % len(downloaded_set))
-    if not osp.exists("data"):
-        os.mkdir("data")
     if not args.clear:
         parse(number=args.repos_number)
         for t in threads:
