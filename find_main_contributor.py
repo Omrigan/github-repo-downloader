@@ -33,7 +33,7 @@ class FindMainContributor(object):
 
     @staticmethod
     def _main_contributor_string(filename, data):
-        return 'main contributor of related GitHub project {} is {}, try to email him at {}'.format(
+        return 'The main contributor of related GitHub project {} is {}, try to email him at {}'.format(
             filename, data['main_contributor']['name'], data['main_contributor']['email']
         ).encode('utf-8')
 
@@ -43,6 +43,17 @@ class FindMainContributor(object):
         )[0]
 
 
+def prompt(find_main_contributor):
+    from sys import version_info
+    py3 = version_info[0] > 2
+
+    while True:
+        request = input('>') if py3 else raw_input('>')
+        print(find_main_contributor(request))
+
+
 if __name__ == "__main__":
+    print('Inititalize model...')
     find_main_contributor = FindMainContributor()
-    print find_main_contributor("Who develops web application framework?")
+    print('Type your query:')
+    prompt(find_main_contributor)
