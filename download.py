@@ -6,11 +6,11 @@ import shutil
 import argparse
 import codecs
 import json
+import sys
 
 from collections import Counter
 
 from os import path as osp
-
 
 REPOS_DIR = 'data/repos'
 DATA_DIR = 'data/prepared'
@@ -57,8 +57,8 @@ class MyThread(threading.Thread):
         repo_dir = os.path.dirname(repo.git_dir)
         readme_file = next(
             (os.path.join(root, filename)
-            for root, _, files in os.walk(repo_dir) for filename in files
-            if osp.splitext(filename)[0] == 'README'),
+             for root, _, files in os.walk(repo_dir) for filename in files
+             if osp.splitext(filename)[0] == 'README'),
             None
         )
         if not readme_file:
@@ -66,7 +66,9 @@ class MyThread(threading.Thread):
             result = ''
         else:
             with open(readme_file) as f:
-                result = f.read().decode('utf-8')
+                result = f.read()
+                if sys.version_info[0] == 2:
+                    result = result.decode('utf-8')
         return result
 
     @staticmethod
@@ -75,8 +77,8 @@ class MyThread(threading.Thread):
             fout.write(json.dumps(kwargs, sort_keys=True, indent=4))
 
     def run(self):
+        print("Started %s" % self.repo["full_name"])
         path = get_local_filename(self.repo["full_name"])
-        semaphore.acquire()
         if osp.exists(path):
             print("Removing %s" % self.repo["full_name"])
             shutil.rmtree(path)
@@ -100,18 +102,24 @@ class MyThread(threading.Thread):
 downloaded_set = set()
 
 
-def parse(number):
-    scheduled_set = set()
-
-    for page in range(100):
-        semaphore.acquire()
+def get_page(page):
+    while True:
         result = requests.get("https://api.github.com/search/repositories", params=
         dict(sort="stars", order="desc", q="language:python", perpage=perpage, page=page)).json()
         if 'items' in result:
             print("Page %s read" % page)
+            return result
         else:
-            print("Wait a bit")
+            print("Error")
+            print(result)
+            time.sleep(20)
 
+
+def parse(number):
+    scheduled_set = set()
+
+    for page in range(100):
+        result = get_page(page)
         for repo in result["items"]:
             if number is not None and (len(downloaded_set) + len(scheduled_set)) >= number:
                 return
@@ -120,12 +128,12 @@ def parse(number):
             elif repo["full_name"] in scheduled_set:
                 print("Already scheduled %s" % repo["full_name"])
             else:
+                semaphore.acquire()
                 t = MyThread(repo)
                 t.start()
                 threads.append(t)
                 scheduled_set.add(repo["full_name"])
 
-        semaphore.release()
         time.sleep(latency)
 
 
@@ -140,7 +148,7 @@ def clear():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Download repos from github.')
     parser.add_argument('--repos_number', type=int, help="Number of repos which will be downloaded")
-    parser.add_argument('--jobs', default=20)
+    parser.add_argument('--jobs', type=int, default=20)
     parser.add_argument('--clear', action="store_true")
 
     args = parser.parse_args()
