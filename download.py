@@ -46,11 +46,11 @@ def get_github_filename(fullname):
     return "%s/%s" % (user, name)
 
 
-class MyThread(threading.Thread):
+class RepoCloneThread(threading.Thread):
     def __init__(self, repo, num_latest_commits=100):
         self.repo = repo
         self._num_latest_commits = num_latest_commits
-        super(MyThread, self).__init__()
+        super(RepoCloneThread, self).__init__()
 
     @staticmethod
     def _get_readme_content(repo):
@@ -103,6 +103,7 @@ downloaded_set = set()
 
 
 def get_page(page):
+    """Get a part of a list of popular repositories"""
     while True:
         result = requests.get("https://api.github.com/search/repositories", params=
         dict(sort="stars", order="desc", q="language:python", perpage=perpage, page=page)).json()
@@ -116,6 +117,7 @@ def get_page(page):
 
 
 def parse(number):
+    '''Download #number repos'''
     scheduled_set = set()
 
     for page in range(100):
@@ -129,7 +131,7 @@ def parse(number):
                 print("Already scheduled %s" % repo["full_name"])
             else:
                 semaphore.acquire()
-                t = MyThread(repo)
+                t = RepoCloneThread(repo)
                 t.start()
                 threads.append(t)
                 scheduled_set.add(repo["full_name"])
