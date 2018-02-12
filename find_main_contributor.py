@@ -55,6 +55,5 @@ def prompt(find_main_contributor):
 if __name__ == "__main__":
     print('Inititalize model...')
     find_main_contributor = FindMainContributor()
-    print find_main_contributor._preprocessor.vocabulary_
     print('Type your query:')
     prompt(find_main_contributor)
