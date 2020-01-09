@@ -3,7 +3,7 @@ chardet==3.0.4
 gitdb2==2.0.3
 GitPython==2.1.8
 idna==2.6
-nltk==3.2.5
+nltk==3.4.5
 numpy==1.14.0
 plumbum==1.6.5
 requests==2.18.4
